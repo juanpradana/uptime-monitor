@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Status</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 20%, rgba(99,102,241,0.14), transparent 25%),
+                  radial-gradient(circle at 80% 10%, rgba(14,165,233,0.18), transparent 25%),
+                  linear-gradient(135deg, #0f172a, #0b1021);
+      min-height: 100vh;
+      color: #e2e8f0;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+    .pill {
+      background: linear-gradient(120deg, #6366f1, #8b5cf6);
+    }
+  </style>
+</head>
+<body class="font-[Inter,ui-sans-serif]">
+  <div class="max-w-4xl mx-auto px-6 sm:px-8 lg:px-10 py-10 space-y-6">
+    <header class="space-y-3 sm:space-y-2">
+      <div class="flex items-center gap-3 text-xs sm:text-sm">
+        <a href="/status/all" class="text-sky-300 hover:text-white underline">← All Public</a>
+        <span class="text-slate-500">|</span>
+        <a href="/" class="text-slate-300 hover:text-white underline">Dashboard</a>
+      </div>
+      <p class="text-sm uppercase tracking-[0.2em] text-sky-300">Public Status</p>
+      <h1 id="title" class="text-3xl font-semibold text-white">Loading...</h1>
+      <p id="subtitle" class="text-slate-300">Status for this monitor.</p>
+      <div class="flex items-center gap-2 text-sm text-slate-200">
+        <span>Rentang:</span>
+        <select id="rangeSelect" class="bg-slate-900/70 border border-slate-700 rounded px-3 py-2 text-sm focus:border-sky-400 focus:outline-none">
+          <option value="1 day">24 jam</option>
+          <option value="3 days">3 hari</option>
+          <option value="5 days">5 hari</option>
+          <option value="7 days">7 hari</option>
+          <option value="30 days">30 hari</option>
+        </select>
+      </div>
+    </header>
+
+    <section class="grid md:grid-cols-3 gap-4">
+      <div class="glass rounded-xl p-4">
+        <p class="text-xs uppercase text-slate-400">Current</p>
+        <p id="currentStatus" class="text-xl font-semibold text-white">-</p>
+        <p id="currentTime" class="text-sm text-slate-400">-</p>
+      </div>
+      <div class="glass rounded-xl p-4">
+        <p class="text-xs uppercase text-slate-400">Latency (ms)</p>
+        <p id="currentLatency" class="text-xl font-semibold text-white">-</p>
+      </div>
+      <div class="glass rounded-xl p-4">
+        <p class="text-xs uppercase text-slate-400">Uptime 24h</p>
+        <p id="uptime" class="text-xl font-semibold text-white">-</p>
+      </div>
+    </section>
+
+    <section class="glass rounded-2xl p-6 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-white">Latency (24h)</h2>
+        <span class="text-xs text-slate-400">Limited to last 200 checks</span>
+      </div>
+      <canvas id="latencyChart" height="120"></canvas>
+      <p class="text-xs text-slate-500">Note: No sensitive data (IP/payload) is shown.</p>
+    </section>
+  </div>
+
+  <script>
+    const state = { range: '1 day' };
+    let chartInstance = null;
+    function statusColor(status) {
+      return status === 1 ? 'text-emerald-300' : 'text-rose-300';
+    }
+
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    async function loadStatus() {
+      const slug = window.location.pathname.split('/').pop();
+      const res = await fetch(`/api/public/${slug}?range=${encodeURIComponent(state.range)}`);
+      if (!res.ok) {
+        document.getElementById('title').textContent = 'Not found';
+        document.getElementById('subtitle').textContent = 'Monitor tidak ditemukan atau tidak public.';
+        return;
+      }
+      const data = await res.json();
+      const m = data.monitor;
+      document.getElementById('title').textContent = m.name;
+      document.getElementById('subtitle').textContent = 'Status publik • slug: ' + m.slug;
+
+      const current = data.current;
+      if (current) {
+        document.getElementById('currentStatus').textContent = current.status === 1 ? 'UP' : 'DOWN';
+        document.getElementById('currentStatus').className = 'text-xl font-semibold ' + statusColor(current.status);
+        document.getElementById('currentLatency').textContent = (current.latency ?? '-') + ' ms';
+        document.getElementById('currentTime').textContent = current.checked_at;
+      } else {
+        document.getElementById('currentStatus').textContent = 'No data yet';
+      }
+      document.getElementById('uptime').textContent = data.uptime_24h === null ? '-' : data.uptime_24h + '%';
+
+      const labels = data.history.map((h) => fmtTime(h.checked_at));
+      const latencies = data.history.map((h) => h.latency ?? 0);
+      const ctx = document.getElementById('latencyChart');
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Latency (ms)',
+            data: latencies,
+            fill: true,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56,189,248,0.12)',
+            tension: 0.3,
+            pointRadius: 0,
+          }]
+        },
+        options: {
+          scales: {
+            x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 }, grid: { color: 'rgba(148,163,184,0.15)' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+          },
+          plugins: {
+            legend: { labels: { color: '#e2e8f0' } },
+            tooltip: {
+              callbacks: {
+                title: (items) => labels[items[0].dataIndex],
+                label: (item) => `Latency: ${latencies[item.dataIndex]} ms`,
+              },
+            },
+          },
+          interaction: { mode: 'nearest', intersect: false },
+        }
+      });
+    }
+
+    loadStatus();
+    document.getElementById('rangeSelect').addEventListener('change', (e) => {
+      state.range = e.target.value;
+      loadStatus();
+    });
+    setInterval(loadStatus, 30000);
+  </script>
+</body>
+</html>

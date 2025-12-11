@@ -1,0 +1,27 @@
+{
+  "name": "uptime-monitor",
+  "version": "1.0.0",
+  "description": "Lightweight self-hosted uptime monitor (SQLite, Express, Tailwind)",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "nanoid": "^5.0.7",
+    "node-cron": "^3.0.3",
+    "ping": "^0.4.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}

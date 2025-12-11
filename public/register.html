@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register • Uptime Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 20%, rgba(14,165,233,0.16), transparent 25%),
+                  radial-gradient(circle at 80% 10%, rgba(99,102,241,0.16), transparent 25%),
+                  linear-gradient(135deg, #0b1021, #0f172a);
+      min-height: 100vh;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+    .pill {
+      background: linear-gradient(120deg, #22d3ee, #6366f1);
+    }
+  </style>
+</head>
+<body class="font-[Inter,ui-sans-serif]">
+  <div class="glass max-w-lg w-full rounded-3xl p-8 space-y-6">
+    <div class="space-y-2 text-center">
+      <p class="text-xs uppercase tracking-[0.3em] text-sky-300">Uptime Monitor</p>
+      <h1 class="text-3xl font-semibold text-white">Create Account</h1>
+      <p class="text-slate-300 text-sm">Limit: 1 akun / 24 jam / IP (anti-spam).</p>
+    </div>
+
+    <div id="flash" class="hidden text-sm rounded-lg px-3 py-2"></div>
+
+    <div class="space-y-4">
+      <div class="space-y-2">
+        <label class="text-sm text-slate-300">Email</label>
+        <input id="email" type="email" class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" placeholder="you@example.com" />
+      </div>
+      <div class="space-y-2">
+        <label class="text-sm text-slate-300">Password</label>
+        <input id="password" type="password" class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" placeholder="••••••••" />
+      </div>
+      <button id="registerBtn" class="w-full pill text-white px-4 py-2.5 rounded-lg font-semibold shadow-lg">Register & Login</button>
+    </div>
+
+    <div class="text-center text-slate-400 text-sm">
+      Sudah punya akun? <a href="/login" class="text-sky-300 underline">Login</a>
+    </div>
+  </div>
+
+  <script>
+    function setFlash(msg, type = 'info') {
+      const el = document.getElementById('flash');
+      if (!msg) { el.classList.add('hidden'); return; }
+      const palette = {
+        info: 'bg-sky-500/20 border border-sky-400/40 text-sky-100',
+        error: 'bg-rose-500/20 border border-rose-400/40 text-rose-100',
+        success: 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-100',
+      };
+      el.className = `text-sm rounded-lg px-3 py-2 ${palette[type] || palette.info}`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    async function register() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Register failed');
+        setFlash('Register sukses, menuju dashboard...', 'success');
+        setTimeout(() => { window.location.href = '/'; }, 400);
+      } catch (err) {
+        setFlash(err.message, 'error');
+      }
+    }
+
+    document.getElementById('registerBtn').addEventListener('click', register);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Enter') register(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Uptime Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 20%, rgba(80,56,221,0.14), transparent 25%),
+                  radial-gradient(circle at 80% 10%, rgba(14,165,233,0.18), transparent 25%),
+                  linear-gradient(135deg, #0f172a, #0b1021);
+      min-height: 100vh;
+      color: #e2e8f0;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+    .pill {
+      background: linear-gradient(120deg, #6366f1, #8b5cf6);
+    }
+  </style>
+</head>
+<body class="font-[Inter,ui-sans-serif]">
+  <div class="max-w-6xl mx-auto px-4 py-10 space-y-8">
+    <header class="flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm uppercase tracking-[0.25em] text-sky-300">Lightweight Uptime</p>
+          <h1 class="text-3xl md:text-4xl font-semibold text-white">Uptime Monitor Dashboard</h1>
+          <p class="text-slate-300 mt-1">Self-hosted, SQLite, telegram alert, hard-pruning logs.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <a href="/status/all" class="text-sm text-sky-300 hover:text-white underline">All Public</a>
+          <a href="/login" class="text-sm text-slate-300 hover:text-white underline" id="loginLink" style="display:none;">Login</a>
+          <button id="logoutBtn" class="pill text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">Logout</button>
+        </div>
+      </div>
+      <div id="flash" class="hidden text-sm rounded-lg px-3 py-2"></div>
+    </header>
+
+    <section id="dashSection" class="space-y-6">
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="glass rounded-xl p-4">
+          <p class="text-xs uppercase text-slate-400">User</p>
+          <p id="userEmail" class="text-lg font-semibold text-white">-</p>
+          <p id="userRole" class="text-sm text-slate-300">-</p>
+        </div>
+        <div class="glass rounded-xl p-4">
+          <p class="text-xs uppercase text-slate-400">Checks</p>
+          <p class="text-lg font-semibold text-white" id="checkInterval">Every 60s</p>
+          <p class="text-sm text-slate-300">Timeout <span id="checkTimeout">30s</span></p>
+        </div>
+        <div class="glass rounded-xl p-4">
+          <p class="text-xs uppercase text-slate-400">Quota</p>
+          <p class="text-lg font-semibold text-white">1 monitor / user</p>
+          <p class="text-sm text-slate-300">Admin unlimited</p>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xl font-semibold text-white">Create / Update Monitor</h3>
+            <p class="text-sm text-slate-400">HTTP(S) GET/POST, ICMP ping, atau Heartbeat (host memanggil endpoint).</p>
+          </div>
+          <button id="refreshBtn" class="text-sm text-sky-300 hover:text-sky-200">Refresh</button>
+        </div>
+        <form id="monitorForm" class="grid md:grid-cols-2 gap-3">
+          <input name="id" type="hidden" />
+          <input name="name" placeholder="Name" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" />
+          <div id="targetWrap">
+            <input name="target_url" id="targetInput" placeholder="Target URL atau host" class="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" />
+          </div>
+          <select name="type" id="typeSelect" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none">
+            <option value="http">HTTP/HTTPS</option>
+            <option value="ping">PING</option>
+            <option value="heartbeat">HEARTBEAT (Callback)</option>
+          </select>
+          <select name="method" id="methodSelect" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+          </select>
+          <div id="postWrap" class="md:col-span-2">
+            <textarea name="post_body" id="postBody" placeholder='POST JSON body (optional)' class="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"></textarea>
+          </div>
+          <div id="helperHttp" class="md:col-span-2 text-xs text-slate-400 hidden">HTTP/HTTPS: isi URL, pilih GET/POST, opsional JSON body.</div>
+          <div id="helperPing" class="md:col-span-2 text-xs text-slate-400 hidden">PING: isi host/IP, method otomatis GET, tidak ada body.</div>
+          <div id="helperHeartbeat" class="md:col-span-2 text-xs text-slate-400 hidden">HEARTBEAT: server Anda memanggil URL callback yang diberikan setelah disimpan. Target URL & body tidak diperlukan.</div>
+          <div class="flex items-center gap-2">
+            <input id="is_public" name="is_public" type="checkbox" class="h-4 w-4 text-sky-400" />
+            <label for="is_public" class="text-sm text-slate-300">Make Public</label>
+          </div>
+          <input name="public_slug" placeholder="Custom slug (optional)" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" />
+          <input name="telegram_chat_id" placeholder="Telegram Chat ID" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" />
+          <input name="telegram_bot_token" placeholder="Telegram Bot Token (kosongkan untuk global)" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-sky-400 focus:outline-none" />
+          <button class="pill text-white px-4 py-2 rounded-lg font-semibold shadow-lg md:col-span-2" type="submit">Save Monitor</button>
+        </form>
+      </div>
+
+      <div class="glass rounded-2xl p-6 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xl font-semibold text-white">Monitors</h3>
+          <span class="text-xs text-slate-400">Status terakhir & link publik</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-slate-400">
+              <tr>
+                <th class="text-left py-2 pr-4">Name</th>
+                <th class="text-left py-2 pr-4">Type</th>
+                <th class="text-left py-2 pr-4">Target / Endpoint</th>
+                <th class="text-left py-2 pr-4">Last</th>
+                <th class="text-left py-2 pr-4">Latency</th>
+                <th class="text-left py-2 pr-4">Public</th>
+                <th class="text-left py-2 pr-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="monitorRows" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="adminPanel" class="hidden glass rounded-2xl p-6 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xl font-semibold text-white">Admin / Users</h3>
+          <span class="text-xs text-slate-400">Delete = ban</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-slate-400">
+              <tr>
+                <th class="text-left py-2 pr-4">Email</th>
+                <th class="text-left py-2 pr-4">Role</th>
+                <th class="text-left py-2 pr-4">Signup IP</th>
+                <th class="text-left py-2 pr-4">Created</th>
+                <th class="text-left py-2 pr-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="userRows" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = { user: null };
+
+    function setFlash(msg, type = 'info') {
+      const el = document.getElementById('flash');
+      if (!msg) {
+        el.classList.add('hidden');
+        return;
+      }
+      const palette = {
+        info: 'bg-sky-500/20 border border-sky-400/40 text-sky-100',
+        error: 'bg-rose-500/20 border border-rose-400/40 text-rose-100',
+        success: 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-100',
+      };
+      el.className = `text-sm rounded-lg px-3 py-2 ${palette[type] || palette.info}`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+        ...opts,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function showDash() {
+      document.getElementById('userEmail').textContent = state.user.email;
+      document.getElementById('userRole').textContent = state.user.role.toUpperCase();
+      document.getElementById('checkInterval').textContent = 'Every ' + (window.CHECK_INTERVAL || 60) + 's';
+      document.getElementById('checkTimeout').textContent = Math.round((window.CHECK_TIMEOUT || 30000)/1000) + 's';
+      document.getElementById('adminPanel').classList.toggle('hidden', state.user.role !== 'admin');
+    }
+
+    async function fetchMe() {
+      try {
+        const data = await api('/api/auth/me');
+        state.user = data.user;
+        showDash();
+        await Promise.all([loadMonitors(), loadUsers()]);
+      } catch (_err) {
+        window.location.href = '/login';
+      }
+    }
+
+    async function handleLogout() {
+      await api('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+
+    function monitorRow(m) {
+      const status = m.last_status === 1 ? 'UP' : m.last_status === 0 ? 'DOWN' : '-';
+      const color = m.last_status === 1 ? 'text-emerald-300' : m.last_status === 0 ? 'text-rose-300' : 'text-slate-400';
+      const publicLink = m.is_public
+        ? `<a class="text-sky-300 underline" href="/status/${m.public_slug}" target="_blank">/status/${m.public_slug}</a>`
+        : '-';
+      const heartbeatUrl = m.type === 'heartbeat' ? `${location.origin}/api/heartbeat/${m.heartbeat_token}` : null;
+      const targetLabel = m.type === 'heartbeat'
+        ? `<div class="flex items-center gap-2 max-w-[260px]">
+             <div class="text-sky-300 truncate" title="${heartbeatUrl}">${heartbeatUrl}</div>
+             <button class="text-xs text-slate-200 bg-slate-800/60 border border-slate-700 px-2 py-1 rounded" onclick="copyText('${heartbeatUrl}')">Copy</button>
+           </div>`
+        : `<div class="text-slate-400 truncate max-w-[260px]" title="${m.target_url}">${m.target_url}</div>`;
+      return `
+        <tr>
+          <td class="py-2 pr-4">
+            <div class="font-semibold text-white">${m.name}</div>
+          </td>
+          <td class="py-2 pr-4 text-slate-300 uppercase text-xs">${m.type} ${m.type === 'http' ? '(' + m.method + ')' : ''}</td>
+          <td class="py-2 pr-4">${targetLabel}</td>
+          <td class="py-2 pr-4 ${color}">${status}</td>
+          <td class="py-2 pr-4 text-slate-300">${m.last_latency ?? '-'} ms</td>
+          <td class="py-2 pr-4">${publicLink}</td>
+          <td class="py-2 pr-4 space-x-2">
+            <button class="text-amber-300 text-xs underline" onclick='prefill(${JSON.stringify(m)})'>Edit</button>
+            <button class="text-rose-300 text-xs underline" onclick='deleteMonitor(${m.id})'>Delete</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    async function loadMonitors() {
+      if (!state.user) return;
+      try {
+        const data = await api('/api/monitors');
+        const rows = data.monitors.map(monitorRow).join('');
+        document.getElementById('monitorRows').innerHTML = rows || '<tr><td class="py-3 text-slate-400" colspan="7">No monitors yet.</td></tr>';
+      } catch (err) {
+        setFlash(err.message, 'error');
+      }
+    }
+
+    async function saveMonitor(evt) {
+      evt.preventDefault();
+      const form = evt.target;
+      const payload = Object.fromEntries(new FormData(form).entries());
+      payload.is_public = form.is_public.checked;
+      if (payload.post_body === '') payload.post_body = null;
+      const method = payload.id ? 'PUT' : 'POST';
+      const path = payload.id ? `/api/monitors/${payload.id}` : '/api/monitors';
+      if (payload.id === '') delete payload.id;
+      // Cleanup for heartbeat
+      if (payload.type === 'heartbeat') {
+        payload.target_url = null;
+        payload.method = 'GET';
+        payload.post_body = null;
+      }
+      try {
+        await api(path, { method, body: JSON.stringify(payload) });
+        setFlash('Monitor saved', 'success');
+        form.reset();
+        await loadMonitors();
+      } catch (err) {
+        setFlash(err.message, 'error');
+      }
+    }
+
+    window.prefill = (m) => {
+      const form = document.getElementById('monitorForm');
+      form.id.value = m.id;
+      form.name.value = m.name;
+      form.type.value = m.type;
+      form.method.value = m.method;
+      form.target_url.value = m.target_url;
+      form.post_body.value = m.post_body || '';
+      form.is_public.checked = !!m.is_public;
+      form.public_slug.value = m.public_slug || '';
+      form.telegram_chat_id.value = m.telegram_chat_id || '';
+      form.telegram_bot_token.value = m.telegram_bot_token || '';
+      setFlash('Edit mode: update then save', 'info');
+    };
+
+    window.deleteMonitor = async (id) => {
+      if (!confirm('Delete monitor?')) return;
+      try {
+        await api(`/api/monitors/${id}`, { method: 'DELETE' });
+        setFlash('Monitor deleted', 'success');
+        await loadMonitors();
+      } catch (err) {
+        setFlash(err.message, 'error');
+      }
+    };
+
+    function updateFormByType(type) {
+      const target = document.getElementById('targetInput');
+      const method = document.getElementById('methodSelect');
+      const postBody = document.getElementById('postBody');
+      const helperHttp = document.getElementById('helperHttp');
+      const helperPing = document.getElementById('helperPing');
+      const helperHeartbeat = document.getElementById('helperHeartbeat');
+
+      helperHttp.classList.add('hidden');
+      helperPing.classList.add('hidden');
+      helperHeartbeat.classList.add('hidden');
+
+      if (type === 'http') {
+        target.parentElement.classList.remove('hidden');
+        method.disabled = false;
+        postBody.parentElement.classList.remove('hidden');
+        helperHttp.classList.remove('hidden');
+      } else if (type === 'ping') {
+        target.parentElement.classList.remove('hidden');
+        method.value = 'GET';
+        method.disabled = true;
+        postBody.value = '';
+        postBody.parentElement.classList.add('hidden');
+        helperPing.classList.remove('hidden');
+      } else if (type === 'heartbeat') {
+        target.value = '';
+        target.parentElement.classList.add('hidden');
+        method.value = 'GET';
+        method.disabled = true;
+        postBody.value = '';
+        postBody.parentElement.classList.add('hidden');
+        helperHeartbeat.classList.remove('hidden');
+      }
+    }
+
+    async function loadUsers() {
+      if (!state.user || state.user.role !== 'admin') return;
+      try {
+        const data = await api('/api/admin/users');
+        document.getElementById('userRows').innerHTML = data.users
+          .map(
+            (u) => `
+              <tr>
+                <td class="py-2 pr-4 text-white">${u.email}</td>
+                <td class="py-2 pr-4 text-slate-300">${u.role}</td>
+                <td class="py-2 pr-4 text-slate-400">${u.signup_ip || '-'}</td>
+                <td class="py-2 pr-4 text-slate-400">${u.created_at}</td>
+                <td class="py-2 pr-4">
+                  <button class="text-rose-300 text-xs underline" onclick="deleteUser(${u.id})">Delete</button>
+                </td>
+              </tr>
+            `
+          )
+          .join('');
+      } catch (err) {
+        setFlash(err.message, 'error');
+      }
+    }
+
+    window.deleteUser = async (id) => {
+      if (!confirm('Delete user?')) return;
+      try {
+        await api(`/api/admin/users/${id}`, { method: 'DELETE' });
+        setFlash('User deleted', 'success');
+        await loadUsers();
+      } catch (err) {
+        setFlash(err.message, 'error');
+      }
+    };
+
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    document.getElementById('monitorForm').addEventListener('submit', saveMonitor);
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      loadMonitors();
+      loadUsers();
+    });
+    document.getElementById('typeSelect').addEventListener('change', (e) => {
+      updateFormByType(e.target.value);
+    });
+
+    window.copyText = async (text) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        setFlash('Copied to clipboard', 'success');
+      } catch (_err) {
+        setFlash('Gagal copy, salin manual', 'error');
+      }
+    };
+
+    window.CHECK_INTERVAL = 60;
+    window.CHECK_TIMEOUT = 30000;
+    fetch('/api/health').catch(() => {});
+    updateFormByType(document.getElementById('typeSelect').value);
+    fetchMe();
+    setInterval(() => {
+      if (state.user) {
+        loadMonitors();
+        loadUsers();
+      }
+    }, 30000);
+  </script>
+</body>
+</html>

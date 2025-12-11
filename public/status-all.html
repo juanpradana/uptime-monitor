@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Public Status • Uptime Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 20%, rgba(80,56,221,0.12), transparent 25%),
+                  radial-gradient(circle at 80% 10%, rgba(14,165,233,0.16), transparent 25%),
+                  linear-gradient(135deg, #0f172a, #0b1021);
+      min-height: 100vh;
+      color: #e2e8f0;
+    }
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+    .pill {
+      background: linear-gradient(120deg, #6366f1, #8b5cf6);
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .responsive-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .page-shell {
+      margin: 0 auto;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+    @media (min-width: 640px) {
+      .page-shell { padding-left: 2.5rem; padding-right: 2.5rem; }
+    }
+    @media (min-width: 1024px) {
+      .page-shell { padding-left: 4rem; padding-right: 4rem; }
+    }
+    .card-chart {
+      position: relative;
+      height: 140px;
+    }
+    @media (max-width: 480px) {
+      .card-chart { height: 110px; }
+    }
+  </style>
+</head>
+<body class="font-[Inter,ui-sans-serif]">
+  <div class="max-w-7xl page-shell py-8 sm:py-12 space-y-6">
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="space-y-1">
+        <p class="text-xs uppercase tracking-[0.3em] text-sky-300">Public Status Board</p>
+        <h1 class="text-2xl sm:text-3xl font-semibold text-white leading-tight">All Public Monitors</h1>
+        <p class="text-slate-300 text-sm sm:text-base">Monitor yang ditandai public akan muncul di sini. Tidak ada data sensitif yang ditampilkan.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/" class="text-xs sm:text-sm text-slate-300 hover:text-white underline">Dashboard</a>
+        <a href="/status/all" class="text-xs sm:text-sm pill text-white px-4 py-2 rounded-full shadow-lg">Refresh</a>
+      </div>
+    </div>
+
+    <div id="flash" class="hidden text-sm rounded-lg px-3 py-2"></div>
+
+    <div id="grid" class="responsive-grid mx-auto max-w-6xl"></div>
+
+    <div id="empty" class="hidden glass rounded-2xl p-6 text-center text-slate-300">
+      Belum ada monitor public. Atur monitor Anda ke <span class="text-sky-300 font-semibold">Make Public</span> dari dashboard.
+    </div>
+  </div>
+
+  <script>
+    const charts = {};
+
+    function setFlash(msg, type = 'info') {
+      const el = document.getElementById('flash');
+      if (!msg) { el.classList.add('hidden'); return; }
+      const palette = {
+        info: 'bg-sky-500/20 border border-sky-400/40 text-sky-100',
+        error: 'bg-rose-500/20 border border-rose-400/40 text-rose-100',
+      };
+      el.className = `text-sm rounded-lg px-3 py-2 ${palette[type] || palette.info}`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function card(m) {
+      const status = m.last_status === 1 ? 'UP' : m.last_status === 0 ? 'DOWN' : 'UNKNOWN';
+      const badgeColor = m.last_status === 1 ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-300/40'
+        : m.last_status === 0 ? 'bg-rose-400/20 text-rose-200 border border-rose-300/40'
+        : 'bg-slate-500/20 text-slate-200 border border-slate-400/40';
+      const chartId = `chart-${m.slug}`;
+      return `
+        <a href="/status/${m.slug}" class="block glass rounded-2xl p-5 hover:border-sky-400/60 transition">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs uppercase text-slate-400">${m.type}</p>
+              <h3 class="text-lg font-semibold text-white leading-tight">${m.name}</h3>
+            </div>
+            <span class="badge ${badgeColor}">${status}</span>
+          </div>
+          <div class="mt-3 text-sm text-slate-300 space-y-1">
+            <div class="flex justify-between">
+              <span>Latency</span>
+              <span class="text-slate-100">${m.last_latency ?? '-'} ms</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Uptime 24h</span>
+              <span class="text-slate-100">${m.uptime_24h === null ? '-' : m.uptime_24h + '%'}</span>
+            </div>
+            <div class="flex justify-between text-xs text-slate-400">
+              <span>Last check</span>
+              <span>${m.last_checked_at || '-'}</span>
+            </div>
+          </div>
+          <div class="mt-4 text-xs text-sky-300 underline truncate">/status/${m.slug}</div>
+          <div class="mt-4 card-chart">
+            <canvas id="${chartId}"></canvas>
+          </div>
+        </a>
+      `;
+    }
+
+    async function load() {
+      try {
+        const res = await fetch(`/api/public`);
+        const data = await res.json();
+        const monitors = data.monitors || [];
+        if (monitors.length === 0) {
+          document.getElementById('empty').classList.remove('hidden');
+          document.getElementById('grid').innerHTML = '';
+          return;
+        }
+        document.getElementById('empty').classList.add('hidden');
+        document.getElementById('grid').innerHTML = monitors.map(card).join('');
+        monitors.forEach(renderChart);
+      } catch (err) {
+        setFlash(err.message || 'Failed to load');
+      }
+    }
+
+    function renderChart(m) {
+      const ctx = document.getElementById(`chart-${m.slug}`);
+      if (!ctx || !m.history || m.history.length === 0) return;
+      if (charts[m.slug]) {
+        charts[m.slug].destroy();
+      }
+      const labels = m.history.map((h) => new Date(h.checked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      const latencies = m.history.map((h) => h.latency ?? 0);
+      charts[m.slug] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Latency (ms)',
+            data: latencies,
+            fill: true,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56,189,248,0.12)',
+            tension: 0.35,
+            pointRadius: 0,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: '#94a3b8', maxTicksLimit: 5 }, grid: { color: 'rgba(148,163,184,0.15)' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => labels[items[0].dataIndex],
+                label: (item) => `Latency: ${latencies[item.dataIndex]} ms`,
+              },
+            },
+          }
+        }
+      });
+    }
+
+    load();
+    setInterval(load, 30000);
+  </script>
+</body>
+</html>
