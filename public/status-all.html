@@ -90,6 +90,13 @@
       return new Date(normalized);
     }
 
+    function fmtChartLabel(iso) {
+      const d = parseUTC(iso);
+      if (!d) return '-';
+      // Show date + time for card charts (always showing recent data)
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
     function fmtDateTime(iso) {
       const d = parseUTC(iso);
       if (!d) return '-';
@@ -169,10 +176,7 @@
       if (charts[m.slug]) {
         charts[m.slug].destroy();
       }
-      const labels = m.history.map((h) => {
-        const d = parseUTC(h.checked_at);
-        return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
-      });
+      const labels = m.history.map((h) => fmtChartLabel(h.checked_at));
       const latencies = m.history.map((h) => h.latency ?? 0);
       charts[m.slug] = new Chart(ctx, {
         type: 'line',
@@ -192,14 +196,26 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: '#94a3b8', maxTicksLimit: 5 }, grid: { color: 'rgba(148,163,184,0.15)' } },
-            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+            x: {
+              ticks: {
+                color: '#94a3b8',
+                maxTicksLimit: window.innerWidth < 640 ? 3 : 5,
+                maxRotation: 45,
+                minRotation: 0,
+                font: { size: window.innerWidth < 640 ? 8 : 10 },
+              },
+              grid: { color: 'rgba(148,163,184,0.15)' },
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { size: window.innerWidth < 640 ? 9 : 11 } },
+              grid: { color: 'rgba(148,163,184,0.15)' },
+            },
           },
           plugins: {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                title: (items) => labels[items[0].dataIndex],
+                title: (items) => fmtDateTime(m.history[items[0].dataIndex]?.checked_at),
                 label: (item) => `Latency: ${latencies[item.dataIndex]} ms`,
               },
             },

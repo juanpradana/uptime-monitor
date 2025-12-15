@@ -69,7 +69,9 @@
         <h2 class="text-xl font-semibold text-white">Latency (24h)</h2>
         <span class="text-xs text-slate-400">Limited to last 200 checks</span>
       </div>
-      <canvas id="latencyChart" height="120"></canvas>
+      <div class="relative h-48 sm:h-64 md:h-72">
+        <canvas id="latencyChart"></canvas>
+      </div>
       <p class="text-xs text-slate-500">Note: No sensitive data (IP/payload) is shown.</p>
     </section>
   </div>
@@ -93,6 +95,16 @@
       const d = parseUTC(iso);
       if (!d) return '-';
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function fmtChartLabel(iso, range) {
+      const d = parseUTC(iso);
+      if (!d) return '-';
+      if (range === '1 day') {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      // For longer ranges, show date + time
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
     function fmtDateTime(iso) {
@@ -125,7 +137,7 @@
       }
       document.getElementById('uptime').textContent = data.uptime_24h === null ? '-' : data.uptime_24h + '%';
 
-      const labels = data.history.map((h) => fmtTime(h.checked_at));
+      const labels = data.history.map((h) => fmtChartLabel(h.checked_at, state.range));
       const latencies = data.history.map((h) => h.latency ?? 0);
       const ctx = document.getElementById('latencyChart');
       if (chartInstance) {
@@ -146,15 +158,29 @@
           }]
         },
         options: {
+          responsive: true,
+          maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 }, grid: { color: 'rgba(148,163,184,0.15)' } },
-            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+            x: {
+              ticks: {
+                color: '#94a3b8',
+                maxTicksLimit: window.innerWidth < 640 ? 4 : 8,
+                maxRotation: 45,
+                minRotation: 0,
+                font: { size: window.innerWidth < 640 ? 9 : 11 },
+              },
+              grid: { color: 'rgba(148,163,184,0.15)' },
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { size: window.innerWidth < 640 ? 10 : 12 } },
+              grid: { color: 'rgba(148,163,184,0.15)' },
+            },
           },
           plugins: {
             legend: { labels: { color: '#e2e8f0' } },
             tooltip: {
               callbacks: {
-                title: (items) => labels[items[0].dataIndex],
+                title: (items) => fmtDateTime(data.history[items[0].dataIndex]?.checked_at),
                 label: (item) => `Latency: ${latencies[item.dataIndex]} ms`,
               },
             },
