@@ -86,6 +86,12 @@
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
+    function fmtDateTime(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      return d.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
     async function loadStatus() {
       const slug = window.location.pathname.split('/').pop();
       const res = await fetch(`/api/public/${slug}?range=${encodeURIComponent(state.range)}`);
@@ -104,7 +110,7 @@
         document.getElementById('currentStatus').textContent = current.status === 1 ? 'UP' : 'DOWN';
         document.getElementById('currentStatus').className = 'text-xl font-semibold ' + statusColor(current.status);
         document.getElementById('currentLatency').textContent = (current.latency ?? '-') + ' ms';
-        document.getElementById('currentTime').textContent = current.checked_at;
+        document.getElementById('currentTime').textContent = fmtDateTime(current.checked_at);
       } else {
         document.getElementById('currentStatus').textContent = 'No data yet';
       }
