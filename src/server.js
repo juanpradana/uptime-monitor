@@ -208,6 +208,7 @@ app.put('/api/monitors/:id', requireAuth, (req, res) => {
     public_slug: body.public_slug ?? monitor.public_slug,
     telegram_chat_id: body.telegram_chat_id ?? monitor.telegram_chat_id,
     telegram_bot_token: body.telegram_bot_token ?? monitor.telegram_bot_token,
+    heartbeat_token: monitor.heartbeat_token,
   };
   if (!['http', 'ping', 'heartbeat'].includes(fields.type)) {
     return res.status(400).json({ error: 'Invalid type' });
