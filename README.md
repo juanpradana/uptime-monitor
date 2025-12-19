@@ -38,6 +38,156 @@ npm run dev # nodemon untuk hot reload
 ```
 Server default di `http://localhost:3000`.
 
+## Deploy ke Ubuntu (Auto Start Saat Boot)
+
+Bagian ini menjelaskan cara menjalankan aplikasi di server Ubuntu dan memastikan proses otomatis berjalan saat startup menggunakan **systemd**.
+
+### Prasyarat Server
+- Ubuntu 20.04/22.04/24.04.
+- Node.js **20 LTS** (disarankan untuk kompatibilitas `better-sqlite3`).
+- Build tools untuk native module:
+```bash
+sudo apt update
+sudo apt install -y git build-essential python3
+```
+
+### Install Node.js 20 (NodeSource)
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v
+npm -v
+```
+
+### Setup Aplikasi
+Contoh direktori deploy: `/opt/uptime-monitor`.
+
+1) Buat user khusus (disarankan):
+```bash
+sudo useradd -r -s /usr/sbin/nologin uptime
+```
+
+2) Clone project:
+```bash
+sudo mkdir -p /opt/uptime-monitor
+sudo chown -R $USER:$USER /opt/uptime-monitor
+git clone <REPO_URL> /opt/uptime-monitor
+cd /opt/uptime-monitor
+```
+
+3) Siapkan env:
+```bash
+cp .env.example .env
+```
+
+Isi minimal:
+- `PORT` (misalnya `3000`)
+- `JWT_SECRET` (wajib diganti)
+- `ADMIN_EMAIL` dan `ADMIN_PASSWORD` (opsional, untuk seed admin saat pertama kali boot)
+
+4) Install dependency:
+```bash
+npm ci
+```
+
+5) Pastikan permission untuk folder data:
+```bash
+sudo mkdir -p /opt/uptime-monitor/data
+sudo chown -R uptime:uptime /opt/uptime-monitor
+```
+
+Catatan: database SQLite tersimpan di `data/uptime.db` (dibuat otomatis). Pastikan user service memiliki akses tulis ke folder `data/`.
+
+### Menjalankan dengan systemd (direkomendasikan)
+1) Buat service file:
+```bash
+sudo nano /etc/systemd/system/uptime-monitor.service
+```
+
+2) Isi dengan konfigurasi berikut (sesuaikan path bila berbeda):
+```ini
+[Unit]
+Description=Uptime Monitor (Node.js + SQLite)
+After=network.target
+
+[Service]
+Type=simple
+User=uptime
+WorkingDirectory=/opt/uptime-monitor
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3) Reload systemd dan enable agar auto-start saat boot:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now uptime-monitor
+sudo systemctl status uptime-monitor --no-pager
+```
+
+4) Lihat log:
+```bash
+sudo journalctl -u uptime-monitor -f
+```
+
+### (Opsional) Reverse Proxy Nginx
+Jika ingin expose via domain + HTTPS (mis: `https://monitor.example.com`), jalankan Node di port internal (mis. `3000`) lalu proxy melalui Nginx.
+
+1) Install Nginx:
+```bash
+sudo apt install -y nginx
+```
+
+2) Buat site config:
+```bash
+sudo nano /etc/nginx/sites-available/uptime-monitor
+```
+
+Contoh konfigurasi:
+```nginx
+server {
+  listen 80;
+  server_name monitor.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+3) Enable site:
+```bash
+sudo ln -s /etc/nginx/sites-available/uptime-monitor /etc/nginx/sites-enabled/uptime-monitor
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+4) (Opsional) Firewall:
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+### Backup / Restore Database
+- Backup cukup dengan menyalin file `data/uptime.db`.
+- Disarankan stop service sebelum backup agar konsisten:
+```bash
+sudo systemctl stop uptime-monitor
+sudo cp /opt/uptime-monitor/data/uptime.db /opt/uptime-monitor/data/uptime.db.bak
+sudo systemctl start uptime-monitor
+```
+
 ## Konfigurasi Environment
 | Key | Default | Deskripsi |
 | --- | --- | --- |
