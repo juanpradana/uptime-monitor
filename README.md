@@ -59,8 +59,15 @@ node -v
 npm -v
 ```
 
+Jika instalasi gagal karena konflik paket (`libnode-dev` lama), hapus paket tersebut lalu coba lagi:
+```bash
+sudo apt remove -y libnode-dev
+sudo apt -f install
+sudo apt install -y nodejs
+```
+
 ### Setup Aplikasi
-Contoh direktori deploy: `/opt/uptime-monitor`.
+Contoh direktori deploy: `/var/www/uptime-monitor` (atau `/opt/uptime-monitor`).
 
 1) Buat user khusus (disarankan):
 ```bash
@@ -69,10 +76,10 @@ sudo useradd -r -s /usr/sbin/nologin uptime
 
 2) Clone project:
 ```bash
-sudo mkdir -p /opt/uptime-monitor
-sudo chown -R $USER:$USER /opt/uptime-monitor
-git clone <REPO_URL> /opt/uptime-monitor
-cd /opt/uptime-monitor
+sudo mkdir -p /var/www/uptime-monitor
+sudo chown -R $USER:$USER /var/www/uptime-monitor
+git clone <REPO_URL> /var/www/uptime-monitor
+cd /var/www/uptime-monitor
 ```
 
 3) Siapkan env:
@@ -92,8 +99,13 @@ npm ci
 
 5) Pastikan permission untuk folder data:
 ```bash
-sudo mkdir -p /opt/uptime-monitor/data
-sudo chown -R uptime:uptime /opt/uptime-monitor
+sudo mkdir -p /var/www/uptime-monitor/data
+
+# Jika service dijalankan sebagai www-data (umum di server web):
+sudo chown -R www-data:www-data /var/www/uptime-monitor/data
+
+# Jika service dijalankan sebagai user khusus (contoh: uptime):
+# sudo chown -R uptime:uptime /var/www/uptime-monitor/data
 ```
 
 Catatan: database SQLite tersimpan di `data/uptime.db` (dibuat otomatis). Pastikan user service memiliki akses tulis ke folder `data/`.
@@ -112,15 +124,25 @@ After=network.target
 
 [Service]
 Type=simple
-User=uptime
-WorkingDirectory=/opt/uptime-monitor
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/uptime-monitor
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm start
+EnvironmentFile=-/var/www/uptime-monitor/.env
+ExecStart=/usr/bin/env npm start
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
+```
+
+Jika kamu memakai user khusus (mis. `uptime`), pastikan user tersebut ada. Error `status=217/USER` biasanya berarti user pada unit file tidak ditemukan.
+
+Jika `npm` tidak ditemukan saat `systemd` menjalankan service, cek lokasi binary:
+```bash
+command -v node
+command -v npm
 ```
 
 3) Reload systemd dan enable agar auto-start saat boot:
@@ -184,7 +206,7 @@ sudo ufw enable
 - Disarankan stop service sebelum backup agar konsisten:
 ```bash
 sudo systemctl stop uptime-monitor
-sudo cp /opt/uptime-monitor/data/uptime.db /opt/uptime-monitor/data/uptime.db.bak
+sudo cp /var/www/uptime-monitor/data/uptime.db /var/www/uptime-monitor/data/uptime.db.bak
 sudo systemctl start uptime-monitor
 ```
 
